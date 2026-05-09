@@ -17,7 +17,7 @@ Automates the "review → address → re-review" cycle Miki runs on his own PRs 
 Before starting, verify in order:
 
 1. **PR identification.**
-   - **If the user passed a PR number as an argument** (e.g. `/miki-review-loop 84`): use that number directly. Run `gh pr view <number> --json number,title,headRefName,baseRefName,state` to fetch its details, then **announce** the PR being processed in a single line — e.g. `Processing PR #84 — "<title>" on <head> → <base>` — and proceed without asking for confirmation. The user already named the PR; re-asking is friction.
+   - **If the user passed a PR argument** — accept any of: bare number (`84`), hash form (`#84`), prose (`PR 84`, `PR #84`), or full GitHub PR URL (`https://github.com/<owner>/<repo>/pull/84`). Normalize to a bare number, then run `gh pr view <number> --json number,title,headRefName,baseRefName,state` to fetch its details, **announce** the PR being processed in a single line — e.g. `Processing PR #84 — "<title>" on <head> → <base>` — and proceed without asking for confirmation. The user already named the PR; re-asking is friction.
    - **If no PR number was given**: derive it from the current branch via `gh pr view --json number,title,headRefName,baseRefName,state`. Echo the PR number and title back and **ask the user to confirm** before proceeding. Do not start the loop on an unconfirmed PR. If multiple PRs match or detection is ambiguous, list candidates and ask which one.
    - **If no PR exists or it's not OPEN** (in either case): stop and tell the user.
 2. **Clean working tree.** `git status --porcelain` must be empty. If not, stop — don't mix the loop's commits with unrelated work.
