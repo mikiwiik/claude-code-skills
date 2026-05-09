@@ -1,6 +1,7 @@
 ---
 name: miki-review-loop
 description: Miki's personal pre-self-review loop. Iteratively runs /review on the current PR and addresses obvious issues until only minor nits remain or 3 iterations have run. Surfaces judgment calls back to the user, makes atomic commits per project convention, pushes once at the end. Invoke when the user says "/miki-review-loop", "loop the review", "iterate on the review", or similar after a PR has been created.
+argument-hint: "Optional PR number; if omitted, derived from current branch"
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -15,10 +16,10 @@ Automates the "review → address → re-review" cycle Miki runs on his own PRs 
 
 Before starting, verify in order:
 
-1. **PR identification.** Run `gh pr view --json number,title,headRefName,state` to derive the PR from the current branch.
-   - If multiple PRs match or detection is ambiguous, list candidates and ask the user.
-   - If detection succeeds, **echo the PR number and title back and ask the user to confirm** before proceeding. Do not start the loop on an unconfirmed PR.
-   - If no PR exists or it's not OPEN, stop and tell the user.
+1. **PR identification.**
+   - **If the user passed a PR number as an argument** (e.g. `/miki-review-loop 84`): use that number directly. Run `gh pr view <number> --json number,title,headRefName,baseRefName,state` to fetch its details, then **announce** the PR being processed in a single line — e.g. `Processing PR #84 — "<title>" on <head> → <base>` — and proceed without asking for confirmation. The user already named the PR; re-asking is friction.
+   - **If no PR number was given**: derive it from the current branch via `gh pr view --json number,title,headRefName,baseRefName,state`. Echo the PR number and title back and **ask the user to confirm** before proceeding. Do not start the loop on an unconfirmed PR. If multiple PRs match or detection is ambiguous, list candidates and ask which one.
+   - **If no PR exists or it's not OPEN** (in either case): stop and tell the user.
 2. **Clean working tree.** `git status --porcelain` must be empty. If not, stop — don't mix the loop's commits with unrelated work.
 3. **Not on main.** Current branch must not be `main` / `master`. If it is, stop.
 4. **Verification command available** (see "Verification command" section below). If not, follow the prompt-to-create flow before starting iteration 1.
