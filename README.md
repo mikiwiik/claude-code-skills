@@ -30,10 +30,10 @@ symlink; the source in this repo is untouched).
   on the current PR and addresses obvious issues until only minor nits
   remain (max 3 iterations). Surfaces judgment calls; atomic commits;
   pushes once at the end.
-- **`miki-rebase-reflect`** — rebase the current branch onto latest `main`,
-  then run a bounded impact-analysis rubric against the branch's diff and
-  surface concrete, actionable follow-ups. Always rebases (never merges);
-  hands back on conflict; never pushes.
+- **`miki-rebase-reflect`** — rebase the current branch onto the latest
+  default branch, then reflect briefly on the nature of what landed and
+  anything worth a heads-up. Always rebases (never merges); hands off on
+  conflict or any non-trivial rebase state; never pushes.
 
 ## Adding a new skill
 
