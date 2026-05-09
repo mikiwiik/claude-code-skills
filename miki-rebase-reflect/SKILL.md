@@ -27,12 +27,25 @@ with a useful summary of what just merged.
 
 Before doing anything, verify in order:
 
-1. **Not on the default branch.** Current branch must not be `main` /
+1. **No rebase / merge / cherry-pick already in progress.** Check for
+   `.git/rebase-merge`, `.git/rebase-apply`, `.git/MERGE_HEAD`, or
+   `.git/CHERRY_PICK_HEAD`. If any exist, stop and tell the user a git
+   operation is already in progress — they need to finish or abort it
+   (`git rebase --continue` / `--abort`, `git merge --abort`,
+   `git cherry-pick --abort`) before this skill can run. This is exactly
+   the kind of "weird state" the skill is designed to hand off, not
+   touch.
+2. **Not on the default branch.** Current branch must not be `main` /
    `master`. If it is, stop.
-2. **Clean working tree.** `git status --porcelain` must be empty. If not,
+3. **Clean working tree.** `git status --porcelain` must be empty. If not,
    stop and tell the user to commit, stash, or discard.
-3. **Default branch identified.** Detect via `git symbolic-ref
-   refs/remotes/origin/HEAD`. If ambiguous, ask.
+4. **Default branch identified.** Try in order:
+   1. `git symbolic-ref refs/remotes/origin/HEAD` (strip the
+      `refs/remotes/origin/` prefix).
+   2. If that exits non-zero (common on CI clones and some shallow
+      clones where the symbolic ref isn't set), fall back to
+      `git remote show origin | sed -n 's/^.*HEAD branch: //p'`.
+   3. If both fail or disagree, ask the user.
 
 If any precondition fails, report which one and exit before fetching.
 
@@ -65,12 +78,19 @@ Report:
 - Which files conflict, if any.
 - The resume / abort commands (`git rebase --continue`,
   `git rebase --abort`).
+- The fork-point SHA captured in step 1, so the user (or model) can
+  reflect on the incoming range later.
 
-Then exit. The user (or the surrounding model) takes it from there. After
-they finish the rebase manually, they can re-invoke this skill — it will
-detect the branch is up to date and run the reflection phase against the
-already-rebased state. (Optionally: the user can also just ask the model
-"reflect on what main gained" without re-running the skill.)
+Then exit. The user (or the surrounding model) takes it from there.
+
+Once they finish the rebase manually, **do not** tell them to re-invoke
+this skill for the reflection. Re-invoking won't work: after a manual
+rebase the branch is up-to-date with `origin/<default>`, so the fork
+point equals `origin/<default>` and the incoming-commits list comes back
+empty. Instead, tell them they can ask the model directly — something
+like *"reflect on what main gained since `<fork-point-sha>`"* — and pass
+along the fork-point SHA captured in step 1 of the rebase phase so the
+model has a precise range to look at.
 
 ## The reflection phase
 
