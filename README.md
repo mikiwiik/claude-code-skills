@@ -43,3 +43,8 @@ symlink; the source in this repo is untouched).
 Keeps the install footprint small for machines that don't need everything
 in a full dotfiles repo (e.g. a fresh dev box). One-line install, opt-in
 per machine.
+
+## License
+
+Released under the [MIT License](LICENSE) — use freely, no warranty,
+keep the copyright notice.
