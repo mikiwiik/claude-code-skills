@@ -34,6 +34,11 @@ symlink; the source in this repo is untouched).
   default branch, then reflect briefly on the nature of what landed and
   anything worth a heads-up. Always rebases (never merges); hands off on
   conflict or any non-trivial rebase state; never pushes.
+- **`miki-wrap-up`** — end-of-session sweep. Surfaces anything outstanding
+  in the current conversation and working tree (todos, uncommitted /
+  unpushed work, open PRs, background agents, conversational follow-ups,
+  stale refs noticed) or confirms there's nothing left. Recommends only;
+  never acts.
 
 ## Adding a new skill
 
