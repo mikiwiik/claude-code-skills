@@ -30,8 +30,8 @@ Before doing anything, verify in order:
 
 1. **No rebase / merge / cherry-pick already in progress.** Check for
    `.git/rebase-merge`, `.git/rebase-apply`, `.git/MERGE_HEAD`, or
-   `.git/CHERRY_PICK_HEAD`. If any exist, stop and tell the user a git
-   operation is already in progress — they need to finish or abort it
+   `.git/CHERRY_PICK_HEAD`. If any exist, stop and tell Miki a git
+   operation is already in progress — Miki needs to finish or abort it
    (`git rebase --continue` / `--abort`, `git merge --abort`,
    `git cherry-pick --abort`) before this skill can run. This is exactly
    the kind of "weird state" the skill is designed to hand off, not
@@ -39,14 +39,14 @@ Before doing anything, verify in order:
 2. **Not on the default branch.** Current branch must not be `main` /
    `master`. If it is, stop.
 3. **Clean working tree.** `git status --porcelain` must be empty. If not,
-   stop and tell the user to commit, stash, or discard.
+   stop and tell Miki to commit, stash, or discard.
 4. **Default branch identified.** Try in order:
    1. `git symbolic-ref refs/remotes/origin/HEAD` (strip the
       `refs/remotes/origin/` prefix).
    2. If that exits non-zero (common on CI clones and some shallow
       clones where the symbolic ref isn't set), fall back to
       `git remote show origin | sed -n 's/^.*HEAD branch: //p'`.
-   3. If both fail or disagree, ask the user.
+   3. If both fail or disagree, ask Miki.
 
 If any precondition fails, report which one and exit before fetching.
 
@@ -73,7 +73,7 @@ merge would be appropriate are human judgment calls.
 ## Conflict resolution
 
 When `git rebase` stops with conflicts, work through them in-place rather
-than handing back to the user. The loop:
+than handing back to Miki. The loop:
 
 1. Run `git status` to see which files conflict.
 2. For each conflicted file, open it and examine the conflict hunks.
@@ -91,9 +91,9 @@ than handing back to the user. The loop:
   let the language's standard ordering apply.
 - **Lockfiles** (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`,
   `Cargo.lock`, `Gemfile.lock`, `poetry.lock`, `uv.lock`, etc.) — take
-  one side and regenerate by re-running the package manager
-  (`npm install` / `yarn` / `pnpm install` / `cargo build` / etc.).
-  If the regenerator isn't available or fails, escalate.
+  one side and regenerate by re-running the relevant package manager or
+  build tool. If that tool isn't available locally or regeneration
+  fails, escalate.
 - **Generated files** that are reproducible from sources in the repo —
   regenerate rather than merging by hand.
 - **Pure formatting / whitespace** differences with no semantic change.
@@ -113,15 +113,28 @@ than handing back to the user. The loop:
 - Anything you'd hesitate on if a teammate asked "are you sure?"
 
 When escalating, present the conflict tersely: filename, the two sides
-(theirs = incoming from default branch; ours = this branch's commit), and
-a one-line read on the difference. Ask Miki which to take, or how to
-combine. Apply the answer and continue.
+labelled in plain language — "incoming from `<default>`" vs. "this branch's
+commit" — and a one-line read on the difference. Ask Miki which to take,
+or how to combine. Apply the answer and continue.
+
+Avoid the `--ours` / `--theirs` git flags in this skill. Under `git
+rebase` they're swapped relative to `git merge` (during rebase, `ours` is
+the upstream you're replaying onto, `theirs` is the commit being
+replayed), which is a footgun. Resolve by editing the file directly and
+`git add`-ing, never via `git checkout --ours/--theirs`.
 
 ### When resolution itself goes wrong
 
-If a resolution attempt produces something that won't compile, won't
-parse, or you genuinely can't tell what the right shape is — **stop and
-hand off**, treating it like unexpected state.
+If a resolution attempt produces something broken, **stop and hand off**,
+treating it like unexpected state. To detect broken:
+
+- If the repo has a verification command (test, build, typecheck — same
+  detection as the miki-review-loop verification step), run it after the
+  resolution and treat failure as broken.
+- Otherwise, read the file and look for obvious syntactic damage —
+  unclosed brackets, orphaned conflict markers, malformed frontmatter,
+  half-merged hunks. If you can't read the resulting file and tell what
+  it's supposed to be, that counts as broken.
 
 ## Hand-off (unexpected state only)
 
@@ -134,19 +147,17 @@ Report:
 - What state the repo is in (`git status` output is enough).
 - The resume / abort commands (`git rebase --continue`,
   `git rebase --abort`).
-- The fork-point SHA captured in step 1, so the user (or next model
+- The fork-point SHA captured in step 1, so Miki (or the next model
   turn) can reflect on the incoming range later.
 
-Then exit. The user (or the surrounding model) takes it from there.
+Then exit. Miki (or the surrounding model) takes it from there.
 
-Once they finish the rebase manually, **do not** tell them to re-invoke
-this skill for the reflection. Re-invoking won't work: after a manual
-rebase the branch is up-to-date with `origin/<default>`, so the fork
-point equals `origin/<default>` and the incoming-commits list comes back
-empty. Instead, tell them they can ask the model directly — something
-like *"reflect on what main gained since `<fork-point-sha>`"* — and pass
-along the fork-point SHA captured in step 1 of the rebase phase so the
-model has a precise range to look at.
+If Miki ends up finishing the rebase manually after a hand-off, don't
+suggest re-invoking this skill for the reflection — it won't work
+(post-manual-rebase the fork point equals `origin/<default>` and the
+incoming-commits list is empty). Instead, point Miki at the captured
+fork-point SHA and suggest asking the model directly: *"reflect on what
+main gained since `<fork-point-sha>`"*.
 
 ## The reflection phase
 
@@ -171,7 +182,7 @@ Miki (or the next model turn) about to keep working on this branch.
 
 ### How to compute the intersection
 
-- Incoming files: `git log --name-only --pretty=format: <fork-point>..origin/<default> | sort -u`
+- Incoming files: `git log --name-only --pretty=format: <fork-point>..origin/<default> | grep -v '^$' | sort -u`
 - This branch's files: `git diff --name-only origin/<default>..HEAD | sort -u`
 - Intersection: files present in both sets.
 
@@ -200,7 +211,7 @@ End with a short summary. Keep it tight.
 **Branch**: <branch-name>
 **Rebased onto**: origin/<default> @ <short-sha>
 **Exit reason**: <clean | clean after resolving conflicts | already up to date | handed off | precondition failed>
-**Conflicts resolved**: <count> mechanical, <count> with judgment from Miki (omit line if none)
+**Conflicts resolved**: <e.g. "3 mechanical" or "1 mechanical, 2 with Miki's input">
 
 ### Incoming commits
 - <sha> <subject>
@@ -216,6 +227,9 @@ heads-up. If nothing worth flagging: say so plainly.>
 - ...
 <Or: "No files touched by both incoming commits and this branch's diff.">
 ```
+
+For the "Conflicts resolved" line: list only nonzero categories; omit
+the whole line if zero conflicts.
 
 If the rebase was handed off (unexpected state), replace everything from
 "Incoming commits" downward with the resume / abort instructions and the
