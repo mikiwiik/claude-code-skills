@@ -31,9 +31,11 @@ symlink; the source in this repo is untouched).
   remain (max 3 iterations). Surfaces judgment calls; atomic commits;
   pushes once at the end.
 - **`miki-rebase-reflect`** — rebase the current branch onto the latest
-  default branch, then reflect briefly on the nature of what landed and
-  anything worth a heads-up. Always rebases (never merges); hands off on
-  conflict or any non-trivial rebase state; never pushes.
+  default branch, resolving conflicts in-place (mechanical fixes
+  directly, judgment calls escalated to Miki). After the rebase, reflects
+  on the nature of what landed and which incoming files intersect this
+  branch's diff. Always rebases (never merges); hands off only on
+  unexpected git state; never pushes.
 - **`miki-wrap-up`** — end-of-session sweep. Surfaces anything outstanding
   in the current conversation and working tree (todos, uncommitted /
   unpushed work, open PRs, background agents, conversational follow-ups,
