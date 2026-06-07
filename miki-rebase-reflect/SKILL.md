@@ -1,6 +1,6 @@
 ---
 name: miki-rebase-reflect
-description: Miki's rebase-and-reflect skill. Rebases the current branch onto the latest default branch, attempting to resolve conflicts mechanically and prompting Miki for judgment when a conflict requires a decision. After a clean rebase, reflects on what landed in the default branch — the nature of the changes and which incoming files intersect this branch's diff. Hands off only on unexpected git state (not on conflicts). Invoke when the user says "/miki-rebase-reflect", "rebase against main", "rebase against main and resolve conflicts", "pull main and reflect", "main moved, what changed", or similar.
+description: Miki's rebase-and-reflect skill. Rebases the current branch onto the latest default branch, attempting to resolve conflicts mechanically and prompting the user for judgment when a conflict requires a decision. After a clean rebase, reflects on what landed in the default branch — the nature of the changes and which incoming files intersect this branch's diff. Hands off only on unexpected git state (not on conflicts). Invoke when the user says "/miki-rebase-reflect", "rebase against main", "rebase against main and resolve conflicts", "pull main and reflect", "main moved, what changed", or similar.
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -13,8 +13,8 @@ Two phases:
 
 1. **Rebase** the current branch onto the latest default branch (`main` /
    `master`). Resolve conflicts in-place: attempt mechanical resolutions
-   directly, and prompt Miki for judgment when a conflict requires a
-   decision. Hand off only on unexpected git state, not on conflicts.
+   directly, and prompt the user for judgment when a conflict requires
+   a decision. Hand off only on unexpected git state, not on conflicts.
 2. **Reflect** on the commits that landed in the default branch since this
    branch forked — what kind of changes they are, plus which incoming
    files intersect this branch's own diff.
@@ -30,8 +30,8 @@ Before doing anything, verify in order:
 
 1. **No rebase / merge / cherry-pick already in progress.** Check for
    `.git/rebase-merge`, `.git/rebase-apply`, `.git/MERGE_HEAD`, or
-   `.git/CHERRY_PICK_HEAD`. If any exist, stop and tell Miki a git
-   operation is already in progress — Miki needs to finish or abort it
+   `.git/CHERRY_PICK_HEAD`. If any exist, stop and tell the user a git
+   operation is already in progress — they need to finish or abort it
    (`git rebase --continue` / `--abort`, `git merge --abort`,
    `git cherry-pick --abort`) before this skill can run. This is exactly
    the kind of "weird state" the skill is designed to hand off, not
@@ -39,14 +39,14 @@ Before doing anything, verify in order:
 2. **Not on the default branch.** Current branch must not be `main` /
    `master`. If it is, stop.
 3. **Clean working tree.** `git status --porcelain` must be empty. If not,
-   stop and tell Miki to commit, stash, or discard.
+   stop and tell the user to commit, stash, or discard.
 4. **Default branch identified.** Try in order:
    1. `git symbolic-ref refs/remotes/origin/HEAD` (strip the
       `refs/remotes/origin/` prefix).
    2. If that exits non-zero (common on CI clones and some shallow
       clones where the symbolic ref isn't set), fall back to
       `git remote show origin | sed -n 's/^.*HEAD branch: //p'`.
-   3. If both fail or disagree, ask Miki.
+   3. If both fail or disagree, ask the user.
 
 If any precondition fails, report which one and exit before fetching.
 
@@ -73,11 +73,11 @@ merge would be appropriate are human judgment calls.
 ## Conflict resolution
 
 When `git rebase` stops with conflicts, work through them in-place rather
-than handing back to Miki. The loop:
+than handing back to the user. The loop:
 
 1. Run `git status` to see which files conflict.
 2. For each conflicted file, open it and examine the conflict hunks.
-3. Decide: is this **mechanical** (resolve it) or **judgment** (ask Miki)?
+3. Decide: is this **mechanical** (resolve it) or **judgment** (ask the user)?
 4. Resolve or escalate per the rules below, then `git add <file>`.
 5. When all conflicts in this step are staged, `git rebase --continue`.
 6. If the next step in the rebase produces more conflicts, repeat from 1.
@@ -100,7 +100,7 @@ than handing back to Miki. The loop:
 - **Trivial textual conflicts** where one side is clearly a strict
   superset / earlier version of the other.
 
-### What counts as judgment (ask Miki)
+### What counts as judgment (ask the user)
 
 - The same function or block changed differently on both sides, with
   overlapping logic.
@@ -114,7 +114,7 @@ than handing back to Miki. The loop:
 
 When escalating, present the conflict tersely: filename, the two sides
 labelled in plain language — "incoming from `<default>`" vs. "this branch's
-commit" — and a one-line read on the difference. Ask Miki which to take,
+commit" — and a one-line read on the difference. Ask the user which to take,
 or how to combine. Apply the answer and continue.
 
 Avoid the `--ours` / `--theirs` git flags in this skill. Under `git
@@ -147,15 +147,15 @@ Report:
 - What state the repo is in (`git status` output is enough).
 - The resume / abort commands (`git rebase --continue`,
   `git rebase --abort`).
-- The fork-point SHA captured in step 1, so Miki (or the next model
+- The fork-point SHA captured in step 1, so the user (or the next model
   turn) can reflect on the incoming range later.
 
-Then exit. Miki (or the surrounding model) takes it from there.
+Then exit. The user (or the surrounding model) takes it from there.
 
-If Miki ends up finishing the rebase manually after a hand-off, don't
-suggest re-invoking this skill for the reflection — it won't work
+If the user ends up finishing the rebase manually after a hand-off,
+don't suggest re-invoking this skill for the reflection — it won't work
 (post-manual-rebase the fork point equals `origin/<default>` and the
-incoming-commits list is empty). Instead, point Miki at the captured
+incoming-commits list is empty). Instead, point them at the captured
 fork-point SHA and suggest asking the model directly: *"reflect on what
 main gained since `<fork-point-sha>`"*.
 
@@ -164,7 +164,7 @@ main gained since `<fork-point-sha>`"*.
 Once the rebase is clean (whether the rebase itself was conflict-free or
 the conflicts were resolved in-skill), produce a short read on **what
 landed in the default branch since the fork point**. The audience is
-Miki (or the next model turn) about to keep working on this branch.
+the user (or the next model turn) about to keep working on this branch.
 
 ### What to produce
 
@@ -211,7 +211,7 @@ End with a short summary. Keep it tight.
 **Branch**: <branch-name>
 **Rebased onto**: origin/<default> @ <short-sha>
 **Exit reason**: <clean | clean after resolving conflicts | already up to date | handed off | precondition failed>
-**Conflicts resolved**: <e.g. "3 mechanical" or "1 mechanical, 2 with Miki's input">
+**Conflicts resolved**: <e.g. "3 mechanical" or "1 mechanical, 2 with user input">
 
 ### Incoming commits
 - <sha> <subject>
@@ -240,11 +240,11 @@ If there were no incoming commits, say so in one line and exit.
 ## Operating rules
 
 - **Resolve conflicts in-skill.** Mechanical conflicts: resolve and
-  stage. Judgment-call conflicts: ask Miki, apply the answer, continue.
+  stage. Judgment-call conflicts: ask the user, apply the answer, continue.
   Don't hand back partway through a conflict round.
 - **Do edit files when resolving conflicts.** That's the one source-file
   exception; outside of conflict resolution this skill never edits.
-- **Never push.** Pushing a rebased branch is Miki's call.
+- **Never push.** Pushing a rebased branch is the user's call.
 - **Never force-push, never `--force`.** Recovery from a bad rebase is
   `git rebase --abort` or `git reflog` — surface those, don't act on them.
 - **Hand off only on unexpected git state**, not on conflicts. Conflicts

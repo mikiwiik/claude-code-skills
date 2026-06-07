@@ -32,7 +32,7 @@ symlink; the source in this repo is untouched).
   pushes once at the end.
 - **`miki-rebase-reflect`** — rebase the current branch onto the latest
   default branch, resolving conflicts in-place (mechanical fixes
-  directly, judgment calls escalated to Miki). After the rebase, reflects
+  directly, judgment calls escalated to the user). After the rebase, reflects
   on the nature of what landed and which incoming files intersect this
   branch's diff. Always rebases (never merges); hands off only on
   unexpected git state; never pushes.
