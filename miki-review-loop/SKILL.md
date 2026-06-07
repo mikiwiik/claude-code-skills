@@ -32,7 +32,7 @@ Between iterations, before committing fixes, the loop runs the repo's verificati
 
 ### Detection (in order)
 
-1. **`package.json` scripts** — try, in priority order: `check`, `verify`, `validate`, `ci`, `test`. The first one that exists wins (`check` typically aggregates lint+typecheck+test, hence top priority).
+1. **`package.json` scripts** — try, in priority order: `check`, `verify`, `validate`, `ci`, `test`. For each, prefer the `:ci` variant when present (e.g. `check:ci` over `check`) — those are tuned for non-interactive automated runs. First match wins.
 2. **Other stacks** — if the repo isn't Node:
    - `Cargo.toml` present → `cargo check && cargo test`
    - `Makefile` with a `check` target → `make check`
