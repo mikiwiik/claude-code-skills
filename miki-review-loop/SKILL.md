@@ -10,124 +10,109 @@ disable-model-invocation: false
 
 ## What this does
 
-Automates the "review → address → re-review" cycle Miki runs on his own PRs before reading them himself. The loop terminates when no actionable non-nit issues remain, when 3 iterations have run, or when a judgment call surfaces. Always ends with a written summary listing every change made and every commit produced.
+Runs `/review` → addresses issues → re-runs, up to 3 iterations. Exits when only nits remain, a judgment call surfaces, or the cap is hit. Ends with a written summary of every change and commit.
 
 ## Preconditions
 
-Before starting, verify in order:
+Verify in order; stop and report on first failure:
 
 1. **PR identification.**
-   - **If the user passed a PR argument** — accept any of: bare number (`84`), hash form (`#84`), prose (`PR 84`, `PR #84`), or full GitHub PR URL (`https://github.com/<owner>/<repo>/pull/84`). Normalize to a bare number, then run `gh pr view <number> --json number,title,headRefName,baseRefName,state` to fetch its details, **announce** the PR being processed in a single line — e.g. `Processing PR #84 — "<title>" on <head> → <base>` — and proceed without asking for confirmation. The user already named the PR; re-asking is friction.
-   - **If no PR argument was given**: derive it from the current branch via `gh pr view --json number,title,headRefName,baseRefName,state`. Announce the detected PR in the same format as the with-arg path — `Detected PR #N — "<title>" on <head> → <base>` — and **ask the user to confirm** before proceeding. Do not start the loop on an unconfirmed PR. If multiple PRs match or detection is ambiguous, list candidates and ask which one.
-   - **If no PR exists or it's not OPEN** (in either case): stop and tell the user.
-2. **Clean working tree.** `git status --porcelain` must be empty. If not, stop — don't mix the loop's commits with unrelated work.
-3. **Not on main.** Current branch must not be `main` / `master`. If it is, stop.
-4. **Verification command available** (see "Verification command" section below). If not, follow the prompt-to-create flow before starting iteration 1.
+   - **Argument given** (bare `84`, `#84`, `PR 84`, `PR #84`, or full PR URL): normalize to a bare number, run `gh pr view <n> --json number,title,headRefName,baseRefName,state`, announce `Processing PR #N — "<title>" on <head> → <base>`, proceed.
+   - **No argument**: derive from current branch via `gh pr view --json number,title,headRefName,baseRefName,state`. Announce `Detected PR #N — ...` and **ask to confirm**. If ambiguous, list candidates and ask.
+   - **No PR or not OPEN**: stop.
+2. **Clean working tree** (`git status --porcelain` empty).
+3. **Not on `main` / `master`.**
+4. **Verification command available** (see below). If not, follow the prompt-to-create flow before iteration 1.
 
-If any precondition fails, report which one and exit without running `/review`.
+## Verification command
 
-## Verification command (per repo)
+The loop runs the repo's verification command between iterations to confirm fixes don't break the build. Detect on each run:
 
-Between iterations, before committing fixes, the loop runs the repo's verification command to confirm the build still passes. Different repos use different commands, so detect on each run.
+1. **`package.json` scripts** — try in order: `check`, `verify`, `validate`, `ci`, `test`. For each, prefer the `:ci` variant when present (e.g. `check:ci` over `check`) — tuned for non-interactive runs. First match wins.
+2. **Other stacks** — `Cargo.toml` → `cargo check && cargo test`; `Makefile` with `check` target → `make check`; `pyproject.toml` with `[tool.<runner>]` → obvious `check`/`test` task.
+3. **`CLAUDE.md`** — grep for a documented verification command. If present, use it.
 
-### Detection (in order)
+One candidate found → use it, tell the user. Multiple plausible → list and ask.
 
-1. **`package.json` scripts** — try, in priority order: `check`, `verify`, `validate`, `ci`, `test`. For each, prefer the `:ci` variant when present (e.g. `check:ci` over `check`) — those are tuned for non-interactive automated runs. First match wins.
-2. **Other stacks** — if the repo isn't Node:
-   - `Cargo.toml` present → `cargo check && cargo test`
-   - `Makefile` with a `check` target → `make check`
-   - `pyproject.toml` with a `[tool.<runner>]` section → look for an obvious `check`/`test` task
-3. **CLAUDE.md** — grep for a documented verification or build-check command (e.g. a "Verification" section or a fenced block tagged as the canonical check). If present, use it.
+### If none can be found
 
-If exactly one candidate is found, use it and tell the user which one. If multiple plausible candidates exist (e.g. both `check` and `test`), list them and ask which one.
+Stop before iteration 1 and tell the user:
 
-### If no verification command can be found
-
-Stop before starting iteration 1 and tell the user:
-
-> I couldn't find a verification command for this repo. The loop runs one between iterations to confirm fixes don't break the build before committing.
+> I couldn't find a verification command for this repo. The loop runs one between iterations to catch broken intermediate commits before they compound.
 >
 > Options:
-> (a) **Add a `check` script to `package.json`** that aggregates lint + typecheck + test. I can suggest the exact line based on what's installed and what scripts already exist.
-> (b) **Document the command in CLAUDE.md** under a "Verification" section, if you already have a command but it's not discoverable.
-> (c) **Give me the command now** — I'll use it for this run only and won't persist it.
-> (d) **Skip verification this run** — not recommended; risky on iteration 2+ because broken intermediate commits compound.
+> (a) **Add a `check` script** to `package.json` aggregating lint + typecheck + test.
+> (b) **Document the command in CLAUDE.md** under a "Verification" section.
+> (c) **Give me the command now** — for this run only, won't persist.
+> (d) **Skip verification** — not recommended; risky on iteration 2+.
 
-If (a), draft the script line and show it to the user before writing it. If (b), draft the CLAUDE.md addition and show it before writing. Either way, persist via the user's normal commit flow — that addition is its own atomic commit, separate from the review loop.
+For (a) or (b), draft the addition first; persist as a separate atomic commit via the user's normal flow.
 
 ## Severity bands
 
-Classify every finding `/review` produces into one of:
+Classify each `/review` finding:
 
-- **Blocker** — breaks correctness, security, or build (e.g. wrong logic, leaked secret, type error). Fix.
-- **Major** — clear defect or violation of an established project convention with a single right answer (e.g. missing null check on a documented-non-null field, wrong import path). Fix.
-- **Minor** — improvement with a single obvious right answer that doesn't change behavior (e.g. unused import, dead variable, obvious typo in a comment). Fix.
-- **Nit** — style/preference/polish where reasonable people disagree, or where the suggestion is one of several valid choices. **Skip.**
-- **Judgment call** — anything where the right fix depends on intent, tradeoffs, or information not in the diff (architecture decisions, "should this be extracted?", "is this naming clearer?", behavior changes, anything touching public API contracts, anything that would require a new test to validate). **Stop the loop and ask the user.**
+- **Blocker** — breaks correctness, security, or build. Fix.
+- **Major** — clear defect or convention violation, single right answer (e.g. missing null check on documented-non-null field). Fix.
+- **Minor** — single obvious right answer, no behavior change (e.g. unused import, typo). Fix.
+- **Nit** — style/preference, multiple valid choices. **Skip.**
+- **Judgment call** — depends on intent, tradeoffs, or info not in the diff (architecture, naming, public-API contracts, behavior changes, anything needing a new test). **Stop and ask.**
 
-When in doubt between Minor and Judgment call, treat it as a judgment call. The skill's job is to clear obvious work, not to make decisions on the user's behalf.
+When in doubt between Minor and Judgment call, treat as judgment.
 
 ## The loop
 
 For iteration `i` in `1..3`:
 
-1. **Run `/review`** via the Skill tool.
-2. **Classify** every finding into the bands above. Show the user the classification before doing anything: a short list grouped by band.
-3. **If any judgment calls exist**: stop the loop. Ask the user how to proceed on each, one by one. Do not silently skip them and continue — the whole point of stopping is so the human can weigh in.
-4. **If no Blocker / Major / Minor remain**: exit the loop successfully (only nits left, or nothing).
-5. **Address Blocker + Major + Minor findings.** Make the edits. If a finding turns out to be more ambiguous than it looked once you start fixing it, stop and ask — don't force a fix.
-6. **Verify the build still passes** by running the verification command. If it fails, fix the failure and re-verify before committing. If you can't fix it cleanly within the same logical change, surface it as a judgment call and stop.
-7. **Commit atomically** per project convention (see "Commit and push cadence" below).
-8. **Track** every change made in a running log (file path + one-line description of what changed and why) and every commit produced (sha + message).
+1. Run `/review`.
+2. Classify findings; show the grouped list to the user before acting.
+3. **Any judgment calls** → stop, ask one by one. Don't silently skip.
+4. **No Blocker/Major/Minor remain** → exit successfully (only nits, or nothing).
+5. Address Blocker + Major + Minor. If a finding turns out more ambiguous while fixing it, stop and ask.
+6. Run the verification command. If it fails, fix the failure and re-verify before committing. If you can't fix cleanly within the same logical change, surface as a judgment call.
+7. Commit atomically (see below).
+8. Track every change (file path + one-line) and commit (sha + message) in a running log.
 
-If iteration 3 finishes and `/review` still finds non-nit issues, stop and report. Don't silently continue past the cap.
+If iteration 3 finishes with non-nit issues remaining, stop and report.
 
 ## Commit and push cadence
 
-- **Atomic commits per project convention.** One logical change per commit, using the project's commit-message style (most projects in this account use Conventional Commits — check `git log` for recent style, or CLAUDE.md). If iteration 1 fixes two unrelated findings, that's two commits.
-- **Amending is allowed when the new edit is clearly part of the same atomic change** as the previous commit. Examples:
-  - Verification failed after the commit, and the follow-up edit is the fix-the-fix for the same finding → amend.
-  - A second `/review` iteration flags an incomplete fix to a finding from iteration 1 → amend the iteration-1 commit.
-  - Two separate findings, both addressed in iteration 2 → two new commits, no amending across them.
-- **Never amend a commit that was already pushed** to the remote in a prior loop run or by something other than this loop. If the loop sees commits on the branch it didn't make, treat the existing history as immutable.
-- **Push once, at the end of the loop**, regardless of how it terminates (clean exit, cap hit, judgment call surfaced). Single `git push` at the end. Do not push between iterations — the user is reviewing the final state, not intermediate ones.
-- **Never force-push.** If history surgery seems needed for recovery, stop and surface it to the user.
+- **Atomic commits per project convention** (Conventional Commits in most projects — check `git log` or CLAUDE.md). Two unrelated findings = two commits.
+- **Amend** only when the new edit is part of the same atomic change as the previous commit — verification fix-the-fix, a follow-up iteration completing an incomplete fix. Never across two separate findings.
+- **Never amend a commit already pushed** (prior loop run or anything not made by this loop). Treat existing history as immutable.
+- **Push once, at the end** of the loop. Single `git push`, no matter how the loop terminates. Never force-push.
 
 ## Final message format
-
-Always end with a summary, regardless of how the loop terminated. Sections:
 
 ```
 ## Review loop summary
 
 **PR**: #<number> — <title>
 **Iterations run**: <n>/3
-**Exit reason**: <one of: clean (only nits remain), iteration cap reached, judgment call surfaced, precondition failed, build verification failed, no verification command>
+**Exit reason**: <clean (only nits remain) | iteration cap reached | judgment call surfaced | precondition failed | build verification failed | no verification command>
 
 ### Changes made
-- <file:line> — <one-line description>
 - <file:line> — <one-line description>
 - ...
 
 ### Commits in this review cycle
-- <sha> — <commit message>          (new)
-- <sha> — <commit message>          (amended)
+- <sha> — <commit message>          (new | amended)
 - ...
 
 ### Remaining issues
-- **Nits** (skipped intentionally): <count, with a one-line list>
-- **Judgment calls** (need your input): <list with the question for each, or "none">
-- **Unaddressed non-nits** (only if cap was hit): <list>
+- **Nits** (skipped): <count + one-line list>
+- **Judgment calls** (need input): <list with the question, or "none">
+- **Unaddressed non-nits** (only if cap hit): <list>
 
 ### Pushed
 - <yes / no — if no, why>
 ```
 
-List **every** commit produced in this cycle, including ones that were later amended (mark them as amended). If no changes were made (e.g. clean on first iteration), say so explicitly rather than printing empty lists.
+List every commit produced, including ones later amended (mark as amended). If no changes were made, say so plainly rather than printing empty lists.
 
 ## Operating rules
 
-- **Never resolve `/review` findings by deleting tests, weakening assertions, or adding eslint-disable / @ts-ignore.** Those are judgment calls — surface them.
-- **Never broaden scope.** If `/review` flags a problem in code the PR didn't touch, note it as a judgment call ("review found <X> in untouched code — fix here, separate PR, or skip?") rather than silently expanding the diff.
-- **Stay in the diff.** The loop's job is to clean up what this PR introduced, not to refactor the surrounding area.
-- **If `/review` itself fails or returns nothing parseable**, stop and report — don't guess what it would have said.
+- **Never resolve findings** by deleting tests, weakening assertions, or adding `eslint-disable` / `@ts-ignore`. Those are judgment calls.
+- **Never broaden scope.** If `/review` flags untouched code, surface as a judgment call ("fix here, separate PR, or skip?") rather than silently expanding the diff.
+- **Stay in the diff.** Clean up what this PR introduced, not the surrounding area.
+- **If `/review` fails** or returns nothing parseable, stop and report.

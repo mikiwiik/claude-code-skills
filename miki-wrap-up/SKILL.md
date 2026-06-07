@@ -9,81 +9,69 @@ disable-model-invocation: false
 
 ## What this does
 
-Reviews the current conversation and the working tree for outstanding work — the things that should reasonably be closed before this session ends. Produces a structured punch list, or confirms that nothing's left.
-
-This skill **recommends, never acts.** If something needs doing, the user (or the next conversational turn) does it. The skill's job is to surface what's left, not to clear it.
+Reviews the conversation and working tree for outstanding work before the session ends. Produces a structured punch list, or confirms nothing's left. **Recommends, never acts** — if something needs doing, the user (or the next turn) does it.
 
 ## The sweep
 
-Six categories. For each: a short check, then a one-line conclusion. **Skip empty categories silently** — they only appear when they have content. The goal is a quick scannable answer, not a filled-in template.
+Six categories. For each: a short check, then a one-line conclusion. **Skip empty categories silently** — they only appear when they have content.
 
 ### 1. Task list
 
-If `TaskList` has any tasks not in `completed` status, surface them. Distinguish `in_progress` (something is mid-flight) from `pending` (queued but not started). If the task list is empty or everything is completed, skip the section.
+`TaskList` items not in `completed` status. Distinguish `in_progress` (mid-flight) from `pending` (queued). Skip if empty.
 
 ### 2. Working tree
 
-Run `git status --porcelain` and `git status -sb` (the latter for ahead/behind counts). Surface:
-
-- Uncommitted changes (staged or unstaged) that relate to work done this session.
-- Untracked files that look like in-flight work — files mentioned in the conversation, not random editor / OS artifacts.
-- Current branch ahead of its remote (unpushed commits).
-- Current branch behind its remote (someone else pushed; may want to pull).
-
-If the tree is clean and the branch is in sync: skip the section.
+`git status --porcelain` and `git status -sb`. Surface uncommitted changes related to this session, untracked in-flight files (not random OS cruft), and ahead/behind counts vs. remote. Skip if clean and in sync.
 
 ### 3. PRs touched this session
 
-For any PR number that came up in the conversation (created, reviewed, or commented on), check current state with `gh pr view <n> --json number,title,state,mergeable,mergeStateStatus`. Surface anything still actionable:
+For each PR mentioned in the conversation, `gh pr view <n> --json number,title,state,mergeable,mergeStateStatus`. Surface anything still actionable:
 
 - `OPEN` + `CONFLICTING` → user action needed.
 - `OPEN` + `BLOCKED` or awaiting approval → waiting on review.
-- `OPEN` + `MERGEABLE` without `--auto` enabled → could enable auto-merge.
+- `OPEN` + `MERGEABLE` without `--auto` → could enable auto-merge.
 
-PRs that merged or closed during the session are not loose ends — skip them.
+PRs that merged or closed during the session aren't loose ends.
 
 ### 4. Background agents and processes
 
-If any `Agent` runs or background `Bash` invocations from this session are still running, surface them with their description and how long they've been running. The user may want to wait for them, kill them, or follow up on their results.
+Any `Agent` runs or background `Bash` invocations still running — surface with description and runtime. The user may want to wait, kill, or follow up.
 
 ### 5. Flagged follow-ups in the conversation
 
-This is the qualitative one. Re-read the conversation for things either party flagged as *"out of scope for this PR"*, *"follow-up"*, *"later"*, *"I'll do that next"*, *"worth a separate PR"*, etc. — that were **not** subsequently closed in the same session.
-
-List them as a short bullet list with enough context to know what each is — what the follow-up actually is, plus a pointer to the exchange that flagged it. Skip if nothing was flagged.
+Re-read the conversation for things either party flagged as *"out of scope for this PR"*, *"follow-up"*, *"later"*, *"I'll do that next"*, *"separate PR"*, etc. — that were not subsequently closed. List as bullets with enough context (what + pointer to the exchange). Skip if none.
 
 ### 6. Stale references noticed but not fixed
 
-If the conversation discovered stale references that weren't fixed — CLAUDE.md describing an outdated workflow, TODO.md entries that should have been closed, comments pointing at moved code, docs lagging behind code changes — surface them. Skip if none came up.
+CLAUDE.md describing outdated workflow, TODO.md entries that should have been closed, comments pointing at moved code, docs lagging code — only if the conversation surfaced them. Skip if none.
 
 ## Output format
 
-Lead with a one-line headline:
+Lead with a headline:
 
-- *"Nothing outstanding."* if every category is empty.
-- *"N loose end(s):"* otherwise, where N is the total count across all fired categories.
+- *"Nothing outstanding."* — every category empty.
+- *"N loose end(s):"* — N is the total across fired categories.
 
-Then only the categories that have content. Keep each entry to one line where possible.
+Then only the fired categories. One line per entry where possible.
 
 ```
 ## Wrap-up sweep
 
-<one-line headline>
+<headline>
 
 ### <Category that fired>
-- <one-line entry>
-- <one-line entry>
+- <entry>
+- <entry>
 
-### <Next category that fired>
+### <Next category>
 - ...
 ```
 
-If nothing's outstanding, the entire response is one sentence. **Do not** fill the page with *"no tasks, clean tree, no PRs, no background work, nothing flagged, no stale refs"* — that defeats the point of a quick check.
+If nothing's outstanding, the whole response is one sentence. **Don't fill the page** with empty-category stubs — that defeats the point of a quick check.
 
 ## Operating rules
 
-- **Never act.** Don't commit, push, edit files, kill agents, or merge PRs. The skill reports; the user decides.
-- **Quick over thorough.** This is a wrap-up check, not an audit. If checking a category would take more than a few seconds (e.g. fetching ten PRs), summarize what'd need to be checked rather than checking all of it.
-- **Conversation context is authoritative for "flagged follow-ups".** Don't grep `TODO.md` for the whole repo — only flag items the conversation itself raised and didn't close.
-- **Skip empty categories silently.** Sections only appear when they have content.
-- **One-shot.** This skill produces one report per invocation. Don't loop, don't ask follow-up questions. If the user wants to act on a loose end, they'll say so in the next turn.
+- **Never act.** No commits, pushes, edits, killing agents, merging PRs. Report only.
+- **Quick over thorough.** A wrap-up check, not an audit. If a category would take more than a few seconds (e.g. ten PRs to fetch), summarize what'd need to be checked rather than checking all of it.
+- **Conversation is authoritative for "flagged follow-ups".** Don't grep `TODO.md` whole-repo — only conversation-raised items.
+- **One-shot.** One report per invocation. No loops, no follow-up questions.
