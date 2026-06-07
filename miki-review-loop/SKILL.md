@@ -30,7 +30,7 @@ The loop runs the repo's verification command between iterations to confirm fixe
 
 1. **`package.json` scripts** — try in order: `check`, `verify`, `validate`, `ci`, `test`. For each, prefer the `:ci` variant when present (e.g. `check:ci` over `check`) — tuned for non-interactive runs. First match wins.
 2. **Other stacks** — `Cargo.toml` → `cargo check && cargo test`; `Makefile` with `check` target → `make check`; `pyproject.toml` with `[tool.<runner>]` → obvious `check`/`test` task.
-3. **`CLAUDE.md`** — grep for a documented verification command. If present, use it.
+3. **`CLAUDE.md`** — grep for a documented verification command (e.g. under a "Verification" header or a fenced block tagged as the canonical check). If present, use it.
 
 One candidate found → use it, tell the user. Multiple plausible → list and ask.
 
@@ -44,9 +44,9 @@ Stop before iteration 1 and tell the user:
 > (a) **Add a `check` script** to `package.json` aggregating lint + typecheck + test.
 > (b) **Document the command in CLAUDE.md** under a "Verification" section.
 > (c) **Give me the command now** — for this run only, won't persist.
-> (d) **Skip verification** — not recommended; risky on iteration 2+.
+> (d) **Skip verification** — not recommended; risky on iteration 2+ (broken intermediate commits compound).
 
-For (a) or (b), draft the addition first; persist as a separate atomic commit via the user's normal flow.
+For (a) or (b), draft the addition and show it to the user before writing; persist as a separate atomic commit via the user's normal flow.
 
 ## Severity bands
 
@@ -115,4 +115,4 @@ List every commit produced, including ones later amended (mark as amended). If n
 - **Never resolve findings** by deleting tests, weakening assertions, or adding `eslint-disable` / `@ts-ignore`. Those are judgment calls.
 - **Never broaden scope.** If `/review` flags untouched code, surface as a judgment call ("fix here, separate PR, or skip?") rather than silently expanding the diff.
 - **Stay in the diff.** Clean up what this PR introduced, not the surrounding area.
-- **If `/review` fails** or returns nothing parseable, stop and report.
+- **If `/review` fails** or returns nothing parseable, stop and report — don't guess what it would have said.
