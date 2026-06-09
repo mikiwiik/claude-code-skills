@@ -48,6 +48,12 @@ Stop before iteration 1 and tell the user:
 
 For (a) or (b), draft the addition and show it to the user before writing; persist as a separate atomic commit via the user's normal flow.
 
+## Auto-merge handling
+
+After preconditions pass, check `gh pr view <n> --json autoMergeRequest,reviewDecision`. If auto-merge is enabled, disable it (`gh pr merge <n> --disable-auto`) before iteration 1 and record the merge method (`SQUASH`/`MERGE`/`REBASE`) — otherwise the merge can fire on the pre-fix SHA the moment CI greens. Announce `auto-merge paused for loop duration`; also mention if `reviewDecision` is `APPROVED` (that's why the pause matters).
+
+Restore via `gh pr merge <n> --auto --<method>` after the final push, **and on every exit path** (judgment call, cap hit, build verification failed, push failed). If disable or restore fails, stop and report — don't iterate without the pause, don't leave auto-merge in a different state than you found.
+
 ## Severity bands
 
 Classify each `/review` finding:
@@ -106,6 +112,7 @@ If iteration 3 finishes with non-nit issues remaining, stop and report.
 
 ### Pushed
 - <yes / no — if no, why>
+- **Auto-merge**: <paused → restored as <method> | unchanged | restore failed: <reason>>
 ```
 
 List every commit produced, including ones later amended (mark as amended). If no changes were made, say so plainly rather than printing empty lists.
