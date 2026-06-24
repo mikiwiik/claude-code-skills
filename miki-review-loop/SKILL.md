@@ -52,7 +52,7 @@ For (a) or (b), draft the addition and show it to the user before writing; persi
 
 After preconditions pass, check `gh pr view <n> --json autoMergeRequest,reviewDecision`. If auto-merge is enabled, disable it (`gh pr merge <n> --disable-auto`) before iteration 1 and record the merge method (`SQUASH`/`MERGE`/`REBASE`) — otherwise the merge can fire on the pre-fix SHA the moment CI greens. Announce `auto-merge paused for loop duration`; also mention if `reviewDecision` is `APPROVED` (that's why the pause matters).
 
-Restore via `gh pr merge <n> --auto --<method>` after the final push, **and on every exit path** (judgment call, cap hit, build verification failed, push failed). If disable or restore fails, stop and report — don't iterate without the pause, don't leave auto-merge in a different state than you found.
+Restore via `gh pr merge <n> --auto --<method>` after the final push, **and on every exit path**: clean (only nits or no findings at all, no commits made), judgment call surfaced, iteration cap reached, build verification failed, push failed. The trivial-clean exit where no commits were made still requires restoration — don't conflate "nothing to push" with "nothing to restore". Restoration is the **last action before writing the summary**, not something the user has to trigger by saying "please merge". If disable or restore fails, stop and report — don't iterate without the pause, don't leave auto-merge in a different state than you found.
 
 ## Severity bands
 
@@ -73,7 +73,7 @@ For iteration `i` in `1..3`:
 1. Run `/review`.
 2. Classify findings; show the grouped list to the user before acting.
 3. **Any judgment calls** → stop, ask one by one. Don't silently skip.
-4. **No Blocker/Major/Minor remain** → exit successfully (only nits, or nothing).
+4. **No Blocker/Major/Minor remain** → exit successfully (only nits, or nothing). Restore auto-merge before writing the summary (see *Auto-merge handling*).
 5. Address Blocker + Major + Minor. If a finding turns out more ambiguous while fixing it, stop and ask.
 6. Run the verification command. If it fails, fix the failure and re-verify before committing. If you can't fix cleanly within the same logical change, surface as a judgment call.
 7. Commit atomically (see below).
